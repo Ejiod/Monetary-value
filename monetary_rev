@@ -1,0 +1,25 @@
+SELECT
+  x.*,
+  (x.monetary_value/ x.T) as value_per_day,
+  30*(x.monetary_value/ x.T) as value_per_month,
+  365*(x.monetary_value/ x.T) as value_per_year
+FROM (
+  SELECT
+    a.user_id,
+    MIN(a.approval_datetime::date) as first_at,
+    b.midpoint_date,
+    SUM(rev) as monetary_value,
+    date_part('day', age(MAX(a.approval_datetime::date), MIN(a.approval_datetime::date))) as T
+  FROM rev_table a
+  CROSS JOIN ( 
+    SELECT   -- get last and mid-point dates from dataset
+      SELECT MAX(approval_datetime::date) as current_date, 
+      MIN(approval_datetime) + (CEILING((date_part('day', age(MAX(a.approval_datetime::date), MIN(a.approval_datetime::date))))/2)::text || 'day')::interval as
+      midpoint_date
+      FROM rev_table
+      ) b
+  WHERE a.user_id IS NOT NULL -- exclude invalid records
+  GROUP BY a.user_id, b.midpoint_date
+  HAVING first_at < b.midpoint_date  -- customer first observed prior to midpoint
+  ) x
+ORDER BY user_id
